@@ -3,7 +3,6 @@ package org.example.trackit.controller;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.control.Alert;
-import javafx.scene.control.TableView;
 import org.example.trackit.model.Category;
 import org.example.trackit.model.Expense;
 
@@ -15,9 +14,9 @@ import java.util.Scanner;
 public class ExpenseController {
 
     private ObservableList<Expense> expenseList;
-    private ObservableList<Category> categoryList; // New line
+    private ObservableList<Category> categoryList;
     private final String EXPENSE_FILE_PATH = "expenses.csv";
-    private final String CATEGORY_FILE_PATH = "categories.csv"; // New line
+    private final String CATEGORY_FILE_PATH = "categories.csv";
     private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     public ExpenseController() {
@@ -28,13 +27,12 @@ public class ExpenseController {
                 new Category("Utilities"),
                 new Category("Entertainment"),
                 new Category("Other")
-        ); // New line
+        );
         loadExpensesFromFile();
-        loadCategoriesFromFile(); // New line
+        loadCategoriesFromFile();
     }
 
-    // Method to add a new expense
-    public void addExpense(String description, String amountText, Category category, LocalDate date, TableView<Expense> tableView) { // Updated to use Category
+    public void addExpense(String description, String amountText, Category category, LocalDate date) {
         if (description.isEmpty() || amountText.isEmpty() || category == null || date == null) {
             showAlert("Error", "Please fill in all fields.");
             return;
@@ -51,13 +49,9 @@ public class ExpenseController {
         Expense newExpense = new Expense(description, amount, category, date);
         expenseList.add(newExpense);
         saveExpensesToFile();  // Save after adding
-        tableView.setItems(expenseList);
     }
 
-    // Method to remove the selected expense
-    public void removeExpense(TableView<Expense> tableView) {
-        Expense selectedExpense = tableView.getSelectionModel().getSelectedItem();
-
+    public void removeExpense(Expense selectedExpense) {
         if (selectedExpense != null) {
             expenseList.remove(selectedExpense);
             saveExpensesToFile();  // Save after removing
@@ -66,24 +60,37 @@ public class ExpenseController {
         }
     }
 
-    // Method to edit an expense
-    public void editExpense(Expense selectedExpense, String description, String amountText, Category category, LocalDate date, TableView<Expense> tableView) {
-        if (selectedExpense != null) {
-            removeExpense(tableView); // Remove existing expense first
-            addExpense(description, amountText, category, date, tableView); // Add edited expense
-        } else {
+    public void editExpense(Expense selectedExpense, String description, String amountText, Category category, LocalDate date) {
+        if (selectedExpense == null) {
             showAlert("Error", "No expense selected.");
+            return;
+        }
+
+        if (description.isEmpty() || amountText.isEmpty() || category == null || date == null) {
+            showAlert("Error", "Please fill in all fields.");
+            return;
+        }
+
+        try {
+            double amount = Double.parseDouble(amountText);
+            selectedExpense.setDescription(description);
+            selectedExpense.setAmount(amount);
+            selectedExpense.setCategory(category);
+            selectedExpense.setDate(date);
+            saveExpensesToFile();  // Save after editing
+        } catch (NumberFormatException e) {
+            showAlert("Error", "Invalid amount. Please enter a valid number.");
         }
     }
 
-    // Method to save expenses to a CSV file
     private void saveExpensesToFile() {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(EXPENSE_FILE_PATH))) {
             for (Expense expense : expenseList) {
-                writer.write(expense.getDescription() + "," +
-                        expense.getAmount() + "," +
-                        expense.getCategory().getName() + "," + // Updated to use getName()
-                        expense.getDate().format(dateFormatter));
+                writer.write(String.join(",",
+                        expense.getDescription(),
+                        String.valueOf(expense.getAmount()),
+                        expense.getCategory().getName(),
+                        expense.getDate().format(dateFormatter)));
                 writer.newLine();
             }
         } catch (IOException e) {
@@ -91,7 +98,6 @@ public class ExpenseController {
         }
     }
 
-    // Method to load expenses from a CSV file
     private void loadExpensesFromFile() {
         File file = new File(EXPENSE_FILE_PATH);
         if (!file.exists()) {
@@ -106,7 +112,7 @@ public class ExpenseController {
                 String categoryName = data[2];
                 LocalDate date = LocalDate.parse(data[3], dateFormatter);
 
-                Category category = new Category(categoryName); // Create a new category
+                Category category = findOrCreateCategory(categoryName);
                 Expense expense = new Expense(description, amount, category, date);
                 expenseList.add(expense);
             }
@@ -117,7 +123,6 @@ public class ExpenseController {
         }
     }
 
-    // Method to load categories from a CSV file
     private void loadCategoriesFromFile() {
         File file = new File(CATEGORY_FILE_PATH);
         if (!file.exists()) {
@@ -137,7 +142,6 @@ public class ExpenseController {
         }
     }
 
-    // Method to add a category
     public void addCategory(String categoryName) {
         if (categoryName.isEmpty()) {
             showAlert("Error", "Category name cannot be empty.");
@@ -145,12 +149,11 @@ public class ExpenseController {
         }
         Category newCategory = new Category(categoryName);
         categoryList.add(newCategory);
-        saveCategoryToFile(newCategory); // Save to file
+        saveCategoryToFile(newCategory);
     }
 
-    // Method to save a category to a CSV file
     private void saveCategoryToFile(Category category) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(CATEGORY_FILE_PATH, true))) { // Append mode
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(CATEGORY_FILE_PATH, true))) {
             writer.write(category.getName());
             writer.newLine();
         } catch (IOException e) {
@@ -158,7 +161,18 @@ public class ExpenseController {
         }
     }
 
-    // Utility method to show an alert dialog
+    private Category findOrCreateCategory(String categoryName) {
+        for (Category category : categoryList) {
+            if (category.getName().equals(categoryName)) {
+                return category;
+            }
+        }
+        Category newCategory = new Category(categoryName);
+        categoryList.add(newCategory);
+        saveCategoryToFile(newCategory);
+        return newCategory;
+    }
+
     private void showAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle(title);
@@ -167,13 +181,11 @@ public class ExpenseController {
         alert.showAndWait();
     }
 
-    // Getter for expenseList
     public ObservableList<Expense> getExpenseList() {
         return expenseList;
     }
 
-    // Getter for categoryList
-    public ObservableList<Category> getCategoryList() { // New method
+    public ObservableList<Category> getCategoryList() {
         return categoryList;
     }
 }
